@@ -7,11 +7,15 @@
         margin: 0;
       }
       canvas {
+        border: 1px solid black;
         display: block;
+        width: 800px;
+        height: 600px;
       }
     </style>
   </head>
   <body>
+    <h1>Interactive Whiteboard</h1>
     <canvas id="drawingCanvas"></canvas>
 
     <script>
@@ -22,8 +26,8 @@
       let lastY = 0;
       const websocket = new WebSocket("ws://localhost:8000/ws");
 
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = 800;
+      canvas.height = 600;
 
       websocket.onopen = () => {
         console.log("WebSocket connection established.");
@@ -31,6 +35,7 @@
 
       websocket.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        console.log("Received a message:", data);
         drawLine(data.startX, data.startY, data.endX, data.endY);
       };
 

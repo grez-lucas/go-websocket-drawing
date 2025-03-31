@@ -16,6 +16,7 @@ var upgrader = websocket.Upgrader{
 type Hub struct {
 	clients ClientList
 	sync.RWMutex
+	messageQueue chan ([]byte)
 }
 
 func NewHub() *Hub {
@@ -35,6 +36,7 @@ func (h *Hub) Upgrade(w http.ResponseWriter, r *http.Request) {
 	h.addClient(client)
 
 	go client.ReadMessages()
+	go client.WriteMessages()
 }
 
 func (h *Hub) addClient(c *Client) {
