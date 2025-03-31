@@ -65,11 +65,7 @@ func (c *Client) WriteMessages() {
 		}
 
 		// Marshal the message, it must follow DrawDTO struct
-		data, err := json.Marshal(msg)
-		if err != nil {
-			slog.Error("Failed to marshal message", slog.Any("error", err))
-		}
-		if err := c.connection.WriteMessage(websocket.TextMessage, data); err != nil {
+		if err := c.connection.WriteMessage(websocket.TextMessage, msg); err != nil {
 			slog.Error("Failed to send message", slog.Any("error", err))
 		}
 
