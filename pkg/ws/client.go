@@ -1,4 +1,4 @@
-package handlers
+package ws
 
 import (
 	"encoding/json"
@@ -13,14 +13,16 @@ type ClientList map[*Client]bool
 type Client struct {
 	connection   *websocket.Conn
 	Hub          *Hub
-	messageQueue chan ([]byte)
+	MessageQueue chan ([]byte)
+	Chatroom     string
 }
 
 func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 	return &Client{
 		connection:   conn,
 		Hub:          hub,
-		messageQueue: make(chan ([]byte)),
+		MessageQueue: make(chan ([]byte)),
+		Chatroom:     "1",
 	}
 }
 
@@ -38,16 +40,13 @@ func (c *Client) ReadMessages() {
 			slog.Group("message", slog.Int("message_type", messageType), slog.String("message", string(payload))),
 		)
 
-		// TODO: Unmarshal the message and send it to all clients
-
-		var statusMessage dto.DrawDTO
-		if err := json.Unmarshal(payload, &statusMessage); err != nil {
-			slog.Error("Error unmasrhalling message", slog.String("message", string(payload)), slog.Any("error", err))
-			break
+		// Route the Message
+		var msg dto.Message
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			slog.Error("failed to unmarshal DTO message", slog.Any("error", err))
+			continue
 		}
-		for client := range c.Hub.clients {
-			client.messageQueue <- payload
-		}
+		c.Hub.routeMessage(msg, c)
 	}
 }
 
@@ -57,14 +56,20 @@ func (c *Client) WriteMessages() {
 	}()
 
 	for {
-		msg, ok := <-c.messageQueue
+		msg, ok := <-c.MessageQueue
 		if !ok {
 			if err := c.connection.WriteMessage(websocket.CloseMessage, nil); err != nil {
 				slog.Warn("connection closed", slog.Any("error", err))
 			}
 			return
 		}
-		if err := c.connection.WriteMessage(websocket.TextMessage, msg); err != nil {
+
+		// Marshal the message, it must follow DrawDTO struct
+		data, err := json.Marshal(msg)
+		if err != nil {
+			slog.Error("Failed to marshal message", slog.Any("error", err))
+		}
+		if err := c.connection.WriteMessage(websocket.TextMessage, data); err != nil {
 			slog.Error("Failed to send message", slog.Any("error", err))
 		}
 

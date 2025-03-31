@@ -1,12 +1,16 @@
-package handlers
+package ws
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/grez-lucas/go-websocket-drawing/pkg/dto"
 )
+
+var ErrMessageNotSupported = errors.New("this message type is not supported")
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -14,14 +18,19 @@ var upgrader = websocket.Upgrader{
 }
 
 type Hub struct {
-	clients ClientList
+	Clients ClientList
 	sync.RWMutex
-	messageQueue chan ([]byte)
+	handlers map[string]IMessageHandler
 }
 
-func NewHub() *Hub {
+func NewHub(changeRoomHandler, drawHandler IMessageHandler) *Hub {
+	handlers := map[string]IMessageHandler{
+		dto.MessageChangeRoom: changeRoomHandler,
+		dto.MessageDraw:       drawHandler,
+	}
 	return &Hub{
-		clients: make(ClientList),
+		Clients:  make(ClientList),
+		handlers: handlers,
 	}
 }
 
@@ -39,12 +48,25 @@ func (h *Hub) Upgrade(w http.ResponseWriter, r *http.Request) {
 	go client.WriteMessages()
 }
 
+func (h *Hub) routeMessage(msg dto.Message, client *Client) error {
+	handler, ok := h.handlers[msg.Type]
+	if !ok {
+		return ErrMessageNotSupported
+	}
+
+	if err := handler.Handle(msg, client); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (h *Hub) addClient(c *Client) {
 	h.Lock()
 	defer h.Unlock()
 
-	if isConnected, ok := h.clients[c]; !ok {
-		h.clients[c] = true
+	if isConnected, ok := h.Clients[c]; !ok {
+		h.Clients[c] = true
 		if !isConnected {
 			slog.Info("New client added to client list", slog.Any("client", c.connection.LocalAddr()))
 			return
@@ -59,11 +81,11 @@ func (h *Hub) removeClient(c *Client) {
 	h.Lock()
 	defer h.Unlock()
 
-	if _, ok := h.clients[c]; !ok {
+	if _, ok := h.Clients[c]; !ok {
 		slog.Error("Could not remove client from hub list, unregistered", slog.Any("client", c))
 		return
 	}
 
 	c.connection.Close()
-	delete(h.clients, c)
+	delete(h.Clients, c)
 }
