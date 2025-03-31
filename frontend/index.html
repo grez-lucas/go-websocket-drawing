@@ -16,11 +16,19 @@
   </head>
   <body>
     <h1>Interactive Whiteboard</h1>
+    <label for="chatroomSelect">Select Chatroom:</label>
+    <select id="chatroomSelect">
+      <option value="1" selected>1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+    </select>
+
     <canvas id="drawingCanvas"></canvas>
 
     <script>
       const canvas = document.getElementById("drawingCanvas");
       const ctx = canvas.getContext("2d");
+      const chatroomSelect = document.getElementById("chatroomSelect");
       let drawing = false;
       let lastX = 0;
       let lastY = 0;
@@ -31,12 +39,29 @@
 
       websocket.onopen = () => {
         console.log("WebSocket connection established.");
+        sendChangeRoomMessage(chatroomSelect.value);
       };
+
+      class Message {
+        constructor(type, payload) {
+          this.type = type;
+          this.payload = payload;
+        }
+      }
 
       websocket.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        const message = Object.assign(new Message(), data);
         console.log("Received a message:", data);
-        drawLine(data.startX, data.startY, data.endX, data.endY);
+        console.log("Received a parsed class message:", message);
+        if (data.type === "draw_message") {
+          drawLine(
+            data.payload.startX,
+            data.payload.startY,
+            data.payload.endX,
+            data.payload.endY,
+          );
+        }
       };
 
       websocket.onclose = () => {
@@ -66,6 +91,10 @@
         drawing = false;
       });
 
+      chatroomSelect.addEventListener("change", (event) => {
+        sendChangeRoomMessage(event.target.value);
+      });
+
       function drawLine(startX, startY, endX, endY) {
         ctx.beginPath();
         ctx.moveTo(startX, startY);
@@ -74,8 +103,21 @@
       }
 
       function sendDrawingData(startX, startY, endX, endY) {
-        const data = JSON.stringify({ startX, startY, endX, endY });
-        websocket.send(data);
+        const drawPayload = JSON.stringify({ startX, startY, endX, endY });
+        const message = JSON.stringify({
+          type: "draw_message",
+          payload: JSON.parse(drawPayload),
+        });
+        websocket.send(message);
+      }
+
+      function sendChangeRoomMessage(roomName) {
+        const changeRoomPayload = JSON.stringify({ Name: roomName });
+        const message = JSON.stringify({
+          type: "change_room",
+          payload: JSON.parse(changeRoomPayload),
+        });
+        websocket.send(message);
       }
     </script>
   </body>
